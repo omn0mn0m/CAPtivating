@@ -12,6 +12,7 @@
 // ----------------------------
 
 #include<ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 
 #include <Ticker.h>
 
@@ -44,16 +45,24 @@ const char* ssid = "NamGradCap";
 const char* password = "guccigangguccigang";
 const char* value = "";
 
-WiFiServer server(80);
+ESP8266WebServer server(80);
 
 // ISR for display refresh
 void display_updater() {
   display.display(70);
 }
 
+void create_routes() {
+  server.on("/pic", handlePic);
+  server.on("/off", handleOff);
+  server.on("/print", handlePrint);
+}
+
 void setup() {
   WiFi.mode(WIFI_AP);
   WiFi.softAP(ssid, password, 1, 1);
+
+  create_routes();
   server.begin();
   
   display.begin(16);
@@ -77,59 +86,38 @@ void drawFrame(uint16_t *frame) {
   delay(100);
 }
 
-int last_image_displayed = -2;
-int image_to_display = -1;
-
 void loop() {
-  // Check for WiFi client
-  WiFiClient client = server.available();
+  server.handleClient();
+}
 
-  if (client) {
-    String request = client.readStringUntil('\r');
-    client.flush();
-
-    if (request.indexOf("/pic/twitch") != -1) {
-      image_to_display = 0;
-    } else if (request.indexOf("/pic/robotics") != -1) {
-      image_to_display = 1;
-    } else if (request.indexOf("/pic/matlab") != -1) {
-      image_to_display = 2;
-    } else if (request.indexOf("/pic/off") != -1) {
-      image_to_display = -1;
-    } else {
-//      image_to_display = -1;
-    }
-
-    // JSON response
-    String s = "HTTP/1.1 200 OK\r\n";
-    s += "Content-Type: application/json\r\n\r\n";
-    s += "{\"data\":{\"message\":\"success\",\"value\":\"";
-    s += value;
-    s += "\"}}\r\n";
-    s += "\n";
+void handlePic() {
+  String image_name = server.arg("name");
   
-    // Send the response to the client
-    client.print(s);
+  if (image_name == "twitch") {
+    drawFrame(twitch);
+  } else if (image_name == "robotics") {
+    drawFrame(robotics);
+  } else if (image_name == "matlab") {
+    drawFrame(matlab);
+  } else {
+    display.clearDisplay();
   }
+}
 
-  if (last_image_displayed != image_to_display) {
-    switch (image_to_display) {
-      case 0: 
-        drawFrame(twitch);
-        break;
-      case 1: 
-        drawFrame(robotics);
-        break;
-      case 2: 
-        drawFrame(matlab);
-        break;
-      default: 
-        display.clearDisplay();
-        break;
-    }
+void handleOff() {
+  display.clearDisplay();
+}
 
-    last_image_displayed = image_to_display;
+String last_message = "";
+
+void handlePrint() {
+  String to_print = server.arg("text");
+
+  if (last_message != to_print) {
+    display.clearDisplay();
+    display.setCursor(2,0);
+    display.print(to_print);
+
+    last_message = to_print;
   }
-  
-  yield();
 }
